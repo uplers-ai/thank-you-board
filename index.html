@@ -31,11 +31,16 @@
          rules_version = '2';
          service cloud.firestore {
            match /databases/{database}/documents {
-             match /{document=**} {
-               allow read, write: if true;
+             match /{col}/{doc} {
+               allow read, write:
+                 if col in ['votes','suggestions','sugvotes','access'];
              }
            }
          }
+
+       Those are the only four collections the board uses. Writes
+       to anything else are refused, so the database can't be used
+       as free storage by whoever has the link.
 
     e. In this file, search for the line that begins
               var FIREBASE =
