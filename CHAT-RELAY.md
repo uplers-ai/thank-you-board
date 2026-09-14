@@ -1,133 +1,96 @@
 # Posting thank-yous into a Google Chat space
 
-The board can announce every thank-you in a Google Chat space as it is sent.
-This is optional. Leave `var CHAT_RELAY` blank in `index.html` and nothing is posted.
+Every thank-you sent on the board is announced in a Google Chat space as a card.
+This is optional. Clear `var CHAT_RELAY` in `index.html` and the board stops
+posting immediately.
 
-## Why there is a relay in the middle
+## How it is wired
 
-A Google Chat webhook URL is a password. Anyone who has it can post into your
-space as often as they like. `index.html` is served from a public GitHub repo,
-so anything written in it is readable by the whole internet.
-
-So the board never sees the webhook. It posts to a Google Apps Script web app
-instead, and that script holds the webhook and forwards the message. Only the
-Apps Script URL appears in the public page, and on its own that URL can do
-nothing except post a correctly shaped thank-you into your space.
-
-Apps Script is free, runs inside your Google account, and needs no server.
-
-## Step 1 — create the webhook in the space
-
-1. Open the Google Chat space in a browser, not the mobile app.
-2. Click the space name at the top to open the dropdown.
-3. Choose **Apps & integrations**, then **Webhooks**, then **Add webhooks**.
-4. Name it `Thank you Board`. An avatar URL is optional.
-5. Click **Save** and copy the URL it gives you. Keep it to yourself.
-
-If you do not see a Webhooks option, your Workspace admin has turned webhooks
-off for the domain, and they will need to allow it.
-
-## Step 2 — create the relay
-
-1. Go to `script.google.com` and click **New project**.
-2. Delete whatever is in the editor and paste the whole script below.
-3. Put the webhook URL from step 1 between the quotes on the `CHAT_WEBHOOK` line.
-4. Rename the project to `Thank you Board relay` so you can find it later.
-5. Click **Deploy**, then **New deployment**.
-6. Click the gear next to "Select type" and pick **Web app**.
-7. Set **Execute as** to `Me`, and **Who has access** to `Anyone`.
-8. Click **Deploy**. Google will ask you to authorise it the first time. It will
-   warn that the app is not verified; that is normal for your own script. Choose
-   **Advanced**, then **Go to Thank you Board relay (unsafe)**, then **Allow**.
-9. Copy the **Web app URL**. It ends in `/exec`. That is the URL the board needs.
-
-"Who has access: Anyone" sounds alarming but only means the script can be called
-without a Google login, which the board needs. The script does one thing, and the
-webhook stays hidden inside it.
-
-## Step 3 — wire it into the board
-
-Send me the `/exec` URL and I will put it in and push, or do it yourself: open
-`index.html`, find the line starting `var CHAT_RELAY`, paste the URL between the
-quotes, then commit and push. GitHub Pages redeploys in about a minute.
-
-## The relay script
-
-```javascript
-// Thank you Board -> Google Chat relay
-// Receives a thank-you from the board and posts it into a Chat space.
-// The webhook below is a password. Keep this project private.
-
-var CHAT_WEBHOOK = 'PASTE_THE_WEBHOOK_URL_FROM_STEP_1_HERE';
-var BOARD_URL    = 'https://uplers-ai.github.io/thank-you-board/';
-
-function doPost(e) {
-  try {
-    if (!e || !e.postData || !e.postData.contents) return reply({ ok: false, error: 'empty' });
-
-    var d      = JSON.parse(e.postData.contents);
-    var from   = clean(d.from, 60);
-    var to     = clean(d.to, 60);
-    var reason = clean(d.reason, 280);
-    if (!from || !to || !reason) return reply({ ok: false, error: 'missing fields' });
-
-    var text = '*' + from + '* thanked *' + to + '*\n' +
-               '_"' + reason + '"_\n' +
-               '<' + BOARD_URL + '|Thank you Board>';
-
-    UrlFetchApp.fetch(CHAT_WEBHOOK, {
-      method: 'post',
-      contentType: 'application/json; charset=UTF-8',
-      payload: JSON.stringify({ text: text }),
-      muteHttpExceptions: true
-    });
-
-    return reply({ ok: true });
-  } catch (err) {
-    return reply({ ok: false, error: String(err) });
-  }
-}
-
-// Strip the characters Chat treats as formatting so a reason cannot
-// fake bold text, inject a link, or break the message layout.
-function clean(v, max) {
-  return String(v == null ? '' : v)
-    .replace(/[<>*_~`]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, max);
-}
-
-function reply(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+```
+board (public page)  ->  n8n webhook  ->  Google Chat webhook  ->  the space
 ```
 
-## Testing it
+The board never holds the Chat webhook. That URL is a password for the space,
+and `index.html` is served from a public repo, so anything written in it is
+readable by anyone. The board posts to n8n instead, and n8n holds the Chat
+webhook. Only the n8n URL appears in the public page, and on its own it can do
+nothing except post a correctly shaped thank-you into the space.
 
-In the Apps Script editor you cannot run `doPost` directly because it needs a
-request. Paste this extra function, select it in the dropdown and press Run. A
-test message should appear in the space.
+The n8n instance is self-hosted at `n8nserver.project-progress.net`. The
+workflow is called **Thank you Board to Google Chat** and has three nodes.
 
-```javascript
-function testPost() {
-  doPost({ postData: { contents: JSON.stringify({
-    from: 'Test Sender', to: 'Test Receiver', reason: 'Checking the relay works.'
-  }) } });
-}
-```
+| Node | What it does |
+|---|---|
+| Board sends a thank-you | Webhook, POST, path `thank-you-board`. Raw body on. |
+| Build the card | Parses the body, sanitises it, builds the Chat card payload. |
+| Post to Google Chat | POSTs that payload to the Chat webhook. |
 
-Delete `testPost` once you are happy, or leave it; it is never reachable from
-the web app.
+The HTTP Request node's JSON body must be exactly `{{ JSON.stringify($json.payload) }}`.
+The code node builds the whole Chat payload, so any future change to how the
+message looks is a change to that one node and nothing else.
 
-## If you change the script later
+## Why the board posts as text/plain
 
-Editing the code is not enough. Click **Deploy**, then **Manage deployments**,
-then the pencil icon, set **Version** to **New version**, and **Deploy**. The
-`/exec` URL stays the same.
+A browser will not send a cross-origin `application/json` POST without first
+asking the far end for permission, and that permission check is a whole extra
+round trip that can fail for reasons nobody can see. Posting as `text/plain`
+makes it a plain request the browser sends without asking, which is why the
+code node parses the body as a string rather than trusting n8n to have decoded
+it.
+
+## What is sanitised, and why
+
+Google Chat treats `< > * _ ~` and backticks as formatting, and its cards accept
+a little HTML. A thank-you reason is typed by a person, so the code node strips
+those characters before the reason ever reaches the card. Without that, someone
+could write a reason that renders as a clickable link to somewhere else, or as
+fake bold text, inside a space their whole team reads. Anything missing a
+sender, recipient or reason is dropped rather than posted as a broken card.
+
+## Best effort, never blocking
+
+The board calls n8n only after the thank-you has been saved, so the space can
+never announce something the board did not record. The call is fire and forget:
+if n8n is down, the workflow is off, or the Chat webhook has been revoked, the
+thank-you still saves and the sender sees nothing wrong. Nobody loses a
+thank-you because a notification failed.
+
+The cost of that is silence when it breaks. If messages stop arriving, the place
+to look is the workflow's **Executions** tab in n8n, which shows every run and
+which node failed.
+
+## The artwork
+
+`assets/chat-confetti.gif` is the banner. Confetti falls, the words fade up
+underneath, and it settles after about two seconds. It plays once rather than
+looping, because a banner that never stops moving is charming the first time and
+irritating by the fortieth, and this appears on every thank-you.
+
+`assets/chat-confetti.png` is the settled final frame, kept as a fallback in case
+Chat ever stops animating GIFs inside cards. Switching is a one-line change in
+the code node, and the line is commented.
+
+`assets/chat-badge.png` is the circular badge in the card header, the same bead
+ring as the board's masthead.
+
+All three are regenerated by `assets/make-confetti.py`, which uses the board's
+real typeface. Images are served from GitHub Pages because Google's servers have
+to fetch them, so treat them as public.
+
+## Changing the message
+
+Edit the code node in n8n. Nothing in this repo needs to change unless you are
+also changing the artwork. Save the workflow; there is no separate deploy step.
+
+## Rotating the Chat webhook
+
+If the webhook URL ever leaks, open the space, then **Apps & integrations**,
+then **Webhooks**, delete the old one and add a new one. Paste the new URL into
+the HTTP Request node in n8n. Nothing in this repo holds that URL, so nothing
+here needs updating.
 
 ## Turning it off
 
 Clear `var CHAT_RELAY` back to `""` in `index.html` and push. The board stops
-posting immediately. You can leave the Apps Script project in place.
+posting within a minute. Deactivating the n8n workflow also works, but leaves
+the board making a call that quietly fails, so prefer the first.

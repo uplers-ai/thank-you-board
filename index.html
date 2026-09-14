@@ -92,10 +92,11 @@
 
   That URL must NOT be the Chat webhook itself. A Chat webhook URL
   is a password: anyone holding it can post into your space, and
-  this file is public. Put a Google Apps Script web app in between
-  instead - it keeps the webhook secret on Google's side and only
-  its own harmless URL appears here. The relay script and the
-  deployment steps live in CHAT-RELAY.md next to this file.
+  this file is public. Something you control has to sit in between
+  and hold the secret. Here that is a small n8n workflow, and only
+  its own harmless URL appears in this file. How it is wired, what
+  it sanitises and how to change the message all live in
+  CHAT-RELAY.md next to this file.
 
   Posting is best effort. If Chat is down or the relay is wrong the
   thank-you still saves to the board; nobody is blocked and no
