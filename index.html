@@ -257,7 +257,7 @@ a{color:var(--accent)}
 .budget .msg{font-size:13.5px; color:var(--ink-2); flex:1 1 220px; min-width:180px}
 
 /* ---------- give: people ---------- */
-.people{display:grid; grid-template-columns:repeat(auto-fill,minmax(268px,1fr)); gap:12px}
+.people{display:grid; grid-template-columns:repeat(auto-fill,minmax(268px,1fr)); gap:12px; align-items:start}
 .person{background:var(--card); border:1px solid var(--line); border-radius:var(--r-m); padding:14px;
   display:flex; flex-direction:column; gap:11px; transition:border-color .15s, box-shadow .15s}
 .person:hover{border-color:var(--line-2); box-shadow:var(--shadow)}
@@ -534,7 +534,7 @@ a{color:var(--accent)}
         <div class="v"><span id="budgetNum">0</span></div>
       </div>
       <div class="tokens" id="budgetTokens"></div>
-      <p class="msg" id="budgetMsg">One thank-you to each person, once a month. No budget, no limit — just a reason every time.</p>
+      <p class="msg" id="budgetMsg">Thank anyone, as often as they help you. No budget, no limit — just a real reason every time.</p>
     </div>
     <div class="people" id="people"></div>
     <div class="offline hide" id="offlineNote"></div>
@@ -632,8 +632,8 @@ a{color:var(--accent)}
     <div class="panel rules">
       <div class="rule">
         <span class="num">01</span>
-        <h4>One thank-you each, once a month</h4>
-        <p>That's the whole rule. No budget, no limit. If six people helped you, thank six; if eleven did, thank eleven. What keeps it honest isn't scarcity &mdash; it's rule 02.</p>
+        <h4>Thank as often as you like</h4>
+        <p>No budget, no limit, no cap per person. If six people helped you, thank six; if one person helped you six times, thank them six times. What keeps it honest isn't scarcity &mdash; it's rule 02.</p>
       </div>
       <div class="rule">
         <span class="num">02</span>
@@ -642,8 +642,8 @@ a{color:var(--accent)}
       </div>
       <div class="rule">
         <span class="num">03</span>
-        <h4>You can't stack them</h4>
-        <p>One thank-you per person per month, so nobody can pile several on a favourite. Next month the slate is clear and you can thank them again.</p>
+        <h4>Every one needs its own reason</h4>
+        <p>Thanking the same person twice means writing two different reasons for two different things they actually did. Three copies of the same line is one thank-you typed three times, and the whole wall can see it.</p>
       </div>
       <div class="rule">
         <span class="num">04</span>
@@ -687,8 +687,8 @@ a{color:var(--accent)}
       </div>
       <div class="rule">
         <span class="num">12</span>
-        <h4>Changed your mind?</h4>
-        <p>Take a thank-you back any time before the month closes and the bead goes with it. Nothing is locked until the 1st.</p>
+        <h4>Nothing can be taken back</h4>
+        <p>Once you press send it's on the board and on the wall for good. Read it before you send it. If something genuinely has to come off, ask Aayush.</p>
       </div>
     </div>
     <div class="offline" style="margin-top:16px">
@@ -709,8 +709,6 @@ a{color:var(--accent)}
   "use strict";
 
   /* ---------------- data ---------------- */
-  var MAX_GIVES = 13;   // everyone except yourself; set from the roster at boot
-
   var MONTHS = [
     { key:"2026-09", label:"September", short:"Sep" },
     { key:"2026-10", label:"October",   short:"Oct" },
@@ -1000,7 +998,13 @@ a{color:var(--accent)}
   // Thanks can only be given or taken back in the month that is running now.
   function monthIsLive(key){ return monthState(key) === "live"; }
   function rupees(n){ return "₹" + n.toLocaleString("en-IN"); }
-  function voteId(m, from, to){ return m + "__" + from + "__" + to; }
+  // Every thank-you is its own document, so the same pair can appear many times
+  // in a month. Older entries used the id month__from__to; those still count,
+  // they just can't be added to.
+  function newVoteId(m, from, to){
+    return m + "__" + from + "__" + to + "__" +
+           Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
   function shortDate(iso){
     if (!iso) return "";
     var d = new Date(iso);
@@ -1022,10 +1026,9 @@ a{color:var(--accent)}
   /* ---------------- derived ---------------- */
   function votesIn(m){ return votes.filter(function(v){ return v.month === m; }); }
   function givenBy(m, who){ return votesIn(m).filter(function(v){ return v.from === who; }); }
-  function myVoteFor(m, who, target){
-    var g = givenBy(m, who);
-    for (var i = 0; i < g.length; i++) if (g[i].to === target) return g[i];
-    return null;
+  function myVotesFor(m, who, target){
+    return givenBy(m, who).filter(function(v){ return v.to === target; })
+      .sort(function(a, b){ return String(a.at || "").localeCompare(String(b.at || "")); });
   }
   function tallyFor(m){
     var t = {};
@@ -1163,11 +1166,10 @@ a{color:var(--accent)}
       msg.textContent = monthLabel(month) + " has closed and the board for it is final" +
         (count ? " — you sent " + count + "." : ".") + " Thanks for this month go on the current month's page.";
     } else if (count === 0) {
-      msg.textContent = "One thank-you to each person, once a month. Send one to everyone who helped you in " + monthLabel(month) + " — there's no limit and no budget.";
-    } else if (count < MAX_GIVES) {
-      msg.textContent = count + " sent so far in " + monthLabel(month) + ". Send another whenever someone helps; you can take one back any time before the month closes.";
+      msg.textContent = "Thank anyone who helped you in " + monthLabel(month) + ". As many people as you like, as many times as you like — the only rule is a real reason each time.";
     } else {
-      msg.textContent = "You've thanked everyone in " + monthLabel(month) + ". That only means something if each reason was true — worth a re-read.";
+      msg.textContent = count + (count === 1 ? " sent" : " sent") + " so far in " + monthLabel(month) +
+        ". Send another whenever someone helps, including someone you've already thanked. They're permanent once sent.";
     }
 
     var note = $("offlineNote");
@@ -1179,8 +1181,8 @@ a{color:var(--accent)}
     box.innerHTML = "";
     ROSTER.forEach(function(p){
       if (p.id === me) return;
-      var mine = myVoteFor(month, me, p.id);
-      var card = el("div", "person" + (mine ? " done" : ""));
+      var mine = myVotesFor(month, me, p.id);
+      var card = el("div", "person" + (mine.length ? " done" : ""));
 
       var top = el("div", "person-top");
       top.appendChild(avatar(p, "lg"));
@@ -1192,23 +1194,21 @@ a{color:var(--accent)}
       top.appendChild(names);
       card.appendChild(top);
 
-      if (mine) {
+      // everything you've already sent this person this month, oldest first
+      mine.forEach(function(v){
         var g = el("div", "given");
-        g.appendChild(el("p", "q", "“" + mine.reason + "”"));
+        g.appendChild(el("p", "q", "“" + v.reason + "”"));
         var r = el("div", "r");
-        r.appendChild(el("span", null, live ? "Sent" : "Sent · final"));
-        if (live) {
-          var undo = el("button", "linkbtn", "Take it back");
-          undo.type = "button";
-          undo.addEventListener("click", function(){ removeVote(mine); });
-          r.appendChild(undo);
-        }
+        r.appendChild(el("span", null, "Sent" + (shortDate(v.at) ? " · " + shortDate(v.at) : "")));
         g.appendChild(r);
         card.appendChild(g);
-      } else if (openComposer === p.id) {
+      });
+
+      if (openComposer === p.id) {
         card.appendChild(buildComposer(p));
       } else {
-        var btn = el("button", "thank-btn", "Thank " + p.name.split(" ")[0]);
+        var first = p.name.split(" ")[0];
+        var btn = el("button", "thank-btn", mine.length ? "Thank " + first + " again" : "Thank " + first);
         btn.type = "button";
         if (!open) { btn.disabled = true; btn.textContent = "Opens on the 1st"; }
         else if (!live) { btn.disabled = true; btn.textContent = "Month closed"; }
@@ -1223,7 +1223,8 @@ a{color:var(--accent)}
 
   function buildComposer(p){
     var wrap = el("div", "composer");
-    var lab = el("label", null, "What did " + p.name.split(" ")[0] + " do?");
+    var again = myVotesFor(month, me, p.id).length > 0;
+    var lab = el("label", null, "What did " + p.name.split(" ")[0] + " do" + (again ? " this time?" : "?"));
     lab.setAttribute("for", "reason-" + p.id);
     wrap.appendChild(lab);
 
@@ -1720,7 +1721,7 @@ a{color:var(--accent)}
     if (!monthIsLive(month)) { toast(monthLabel(month) + " isn't open for thanks."); renderGive(); return; }
     if (dbState === "offline") { toast("Board is offline — that didn't save."); return; }
 
-    var id = voteId(month, me, toId);
+    var id = newVoteId(month, me, toId);
     var body = { month: month, from: me, to: toId, reason: reason, at: new Date().toISOString() };
 
     STORE.set("votes", id, body).then(function(){
@@ -1742,14 +1743,6 @@ a{color:var(--accent)}
     });
   }
 
-  function removeVote(v){
-    if (!monthIsLive(v.month)) { toast(monthLabel(v.month) + " has closed — it can't be taken back now."); renderGive(); return; }
-    STORE.del("votes", v.id).then(function(){
-      toast("Taken back.");
-      renderAll();
-    })["catch"](function(){ toast("Couldn't take it back. Try again."); });
-  }
-
   /* ---------------- render orchestration ---------------- */
   function renderAll(){
     renderWhoami();
@@ -1761,8 +1754,6 @@ a{color:var(--accent)}
   }
 
   /* ---------------- boot ---------------- */
-  MAX_GIVES = ROSTER.length - 1;
-
   var saved = store("marigold.me");
   if (saved && byId[saved]) me = saved;
 
