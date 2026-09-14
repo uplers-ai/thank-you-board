@@ -825,7 +825,7 @@ a{color:var(--accent)}
   // Google Apps Script web app that forwards a thank-you into a Google Chat
   // space. Blank turns the announcement off. Never put a raw Chat webhook URL
   // here - this file is public. See note 4 at the top of the file.
-  var CHAT_RELAY = "";
+  var CHAT_RELAY = "https://n8nserver.project-progress.net/webhook/thank-you-board";
 
   var STORE = (function(){
     var kind = "none", cdb = null, watches = [], localData = {}, polling = false;
