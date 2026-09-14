@@ -1,0 +1,5 @@
+# Never commit anything holding the Google Chat webhook. That URL is a
+# password for the space and this repo is public.
+*n8n*.json
+*webhook*
+.env
