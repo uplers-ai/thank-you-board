@@ -84,7 +84,26 @@
   var CHAMPION — the end-of-season prize.
 
   ----------------------------------------------------------------
-  4. NO DATABASE?
+  4. ANNOUNCE THANKS IN GOOGLE CHAT  (optional)
+  ----------------------------------------------------------------
+  Search for  var CHAT_RELAY  and put a URL between the quotes to
+  have every thank-you posted into a Google Chat space as it is
+  sent. Leave it blank and nothing is posted.
+
+  That URL must NOT be the Chat webhook itself. A Chat webhook URL
+  is a password: anyone holding it can post into your space, and
+  this file is public. Put a Google Apps Script web app in between
+  instead - it keeps the webhook secret on Google's side and only
+  its own harmless URL appears here. The relay script and the
+  deployment steps live in CHAT-RELAY.md next to this file.
+
+  Posting is best effort. If Chat is down or the relay is wrong the
+  thank-you still saves to the board; nobody is blocked and no
+  error is shown. Nothing is posted until the save succeeds, so the
+  space never announces a thank-you the board did not record.
+
+  ----------------------------------------------------------------
+  5. NO DATABASE?
   ----------------------------------------------------------------
   If FIREBASE is left blank the page still runs, but in demo mode:
   everything stays in that one browser and a banner says so.
@@ -802,6 +821,11 @@ a{color:var(--accent)}
           is shared with anyone else; it is a demo, not a board.
   */
   var FIREBASE = { projectId: "halogen-order-495608-v6", apiKey: "AIzaSyB1LF6jbSGJ1SH_QCo4k6Mpd5MRAdqVOfM" };
+
+  // Google Apps Script web app that forwards a thank-you into a Google Chat
+  // space. Blank turns the announcement off. Never put a raw Chat webhook URL
+  // here - this file is public. See note 4 at the top of the file.
+  var CHAT_RELAY = "";
 
   var STORE = (function(){
     var kind = "none", cdb = null, watches = [], localData = {}, polling = false;
@@ -1715,6 +1739,28 @@ a{color:var(--accent)}
     return svg;
   }
 
+  /* ---------------- google chat ---------------- */
+  // Fire and forget. Sent as text/plain so the browser treats it as a simple
+  // request and never asks the relay for CORS permission it cannot give; the
+  // reply is ignored either way, because a failed announcement must never cost
+  // someone their thank-you.
+  function notifyChat(toId, reason){
+    if (!CHAT_RELAY) return;
+    try {
+      fetch(CHAT_RELAY, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        body: JSON.stringify({
+          from:   byId[me] ? byId[me].name : me,
+          to:     byId[toId] ? byId[toId].name : toId,
+          reason: reason,
+          month:  monthLabel(month)
+        }),
+        keepalive: true
+      })["catch"](function(){});
+    } catch (e) {}
+  }
+
   /* ---------------- writes ---------------- */
   function castVote(toId, reason){
     if (!me || !reason) return;
@@ -1727,6 +1773,7 @@ a{color:var(--accent)}
     STORE.set("votes", id, body).then(function(){
       openComposer = null;
       canWrite = true;
+      notifyChat(toId, reason);
       toast("Thank-you sent to " + byId[toId].name.split(" ")[0] + ".");
       renderAll();
     })["catch"](function(e){
